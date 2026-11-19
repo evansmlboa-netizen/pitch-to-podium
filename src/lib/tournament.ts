@@ -55,7 +55,10 @@ function shuffled<T>(items: T[]): T[] {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const swap = Math.floor(Math.random() * (index + 1));
-    [result[index], result[swap]] = [result[swap], result[index]];
+    const current = result[index] as T;
+    const other = result[swap] as T;
+    result[index] = other;
+    result[swap] = current;
   }
   return result;
 }
@@ -71,12 +74,12 @@ export function makeRoundRobinMatches(groups: Record<string, string[]>): Tournam
     const rounds = rotation.length - 1;
     for (let round = 0; round < rounds; round += 1) {
       for (let index = 0; index < rotation.length / 2; index += 1) {
-        let home = rotation[index];
-        let away = rotation[rotation.length - 1 - index];
+        let home = rotation[index] as string;
+        let away = rotation[rotation.length - 1 - index] as string;
         if (round % 2 === 1 && index === 0) [home, away] = [away, home];
         matches.push(match(`group-${group}-${round + 1}-${index + 1}`, `Round ${round + 1}`, group, home, away));
       }
-      const fixed = rotation[0];
+      const fixed = rotation[0] as string;
       const rest = rotation.slice(1);
       rest.unshift(rest.pop() as string);
       rotation.splice(0, rotation.length, fixed, ...rest);
@@ -91,20 +94,30 @@ export function buildGroups(teams: Team[], mode: DrawMode): Record<string, strin
   const result: Record<string, string[]> = Object.fromEntries(labels.map((label) => [label, []]));
   if (mode === "manual") {
     teams.forEach((team) => {
-      if (team.manualGroup && result[team.manualGroup]) result[team.manualGroup].push(team.id);
+      const bucket = team.manualGroup ? result[team.manualGroup] : undefined;
+      if (bucket) bucket.push(team.id);
     });
-    teams.filter((team) => !labels.some((label) => result[label].includes(team.id))).forEach((team) => {
-      const next = labels.find((label) => result[label].length < 4);
-      if (next) result[next].push(team.id);
+    teams.filter((team) => !labels.some((label) => result[label]?.includes(team.id))).forEach((team) => {
+      const next = labels.find((label) => (result[label]?.length ?? 0) < 4);
+      const bucket = next ? result[next] : undefined;
+      if (bucket) bucket.push(team.id);
     });
     return result;
   }
   if (mode === "random") {
-    shuffled(teams).forEach((team, index) => result[labels[index % labels.length]].push(team.id));
+    shuffled(teams).forEach((team, index) => {
+      const label = labels[index % labels.length];
+      const bucket = label ? result[label] : undefined;
+      if (bucket) bucket.push(team.id);
+    });
     return result;
   }
   for (let pot = 1; pot <= 4; pot += 1) {
-    shuffled(teams.filter((team) => team.pot === pot)).forEach((team, index) => result[labels[index % labels.length]].push(team.id));
+    shuffled(teams.filter((team) => team.pot === pot)).forEach((team, index) => {
+      const label = labels[index % labels.length];
+      const bucket = label ? result[label] : undefined;
+      if (bucket) bucket.push(team.id);
+    });
   }
   return result;
 }
@@ -194,6 +207,14 @@ function losingTeam(game: TournamentMatch): string | null {
   return winner === game.homeTeamId ? game.awayTeamId : game.homeTeamId;
 }
 
+function winnerOf(game: TournamentMatch | undefined): string | null {
+  return game ? matchWinner(game) : null;
+}
+
+function loserOf(game: TournamentMatch | undefined): string | null {
+  return game ? losingTeam(game) : null;
+}
+
 export function saveGroupScore(state: TournamentState, matchId: string, homeScore: number, awayScore: number): TournamentState {
   return { ...state, groupMatches: state.groupMatches.map((game) => game.id === matchId ? { ...game, homeScore, awayScore, status: "full-time", homePens: null, awayPens: null } : game) };
 }
@@ -217,8 +238,8 @@ export function saveKnockoutScore(state: TournamentState, matchId: string, score
   if (source.id.startsWith("ko-qf-") && updated.some((game) => game.id.startsWith("ko-sf-"))) {
     const semiOne = updated.find((game) => game.id === "ko-sf-1");
     const semiTwo = updated.find((game) => game.id === "ko-sf-2");
-    resetIfMatch(semiOne, matchWinner(quarterGames[0]), matchWinner(quarterGames[1]), reset);
-    resetIfMatch(semiTwo, matchWinner(quarterGames[2]), matchWinner(quarterGames[3]), reset);
+    resetIfMatch(semiOne, winnerOf(quarterGames[0]), winnerOf(quarterGames[1]), reset);
+    resetIfMatch(semiTwo, winnerOf(quarterGames[2]), winnerOf(quarterGames[3]), reset);
     const final = updated.find((game) => game.id === "ko-final");
     const third = updated.find((game) => game.id === "ko-third");
     resetIfMatch(final, null, null, reset);
@@ -228,8 +249,8 @@ export function saveKnockoutScore(state: TournamentState, matchId: string, score
     const finalists = semiGames.length === 2 ? semiGames : semiGames.slice(0, 2);
     const final = updated.find((game) => game.id === "ko-final");
     const third = updated.find((game) => game.id === "ko-third");
-    if (final) reset(final, matchWinner(finalists[0]), matchWinner(finalists[1]));
-    if (third) reset(third, losingTeam(finalists[0]), losingTeam(finalists[1]));
+    if (final) reset(final, winnerOf(finalists[0]), winnerOf(finalists[1]));
+    if (third) reset(third, loserOf(finalists[0]), loserOf(finalists[1]));
   }
   return { ...state, knockoutMatches: updated };
 }

@@ -76,7 +76,8 @@ function parsePersisted(value: string | null): { activeId: string; tournaments: 
     if (!Array.isArray(parsed.tournaments) || parsed.tournaments.length === 0) return null;
     const valid = parsed.tournaments.filter((entry) => entry && typeof entry.id === "string" && entry.state && Array.isArray(entry.state.teams));
     if (!valid.length) return null;
-    return { activeId: valid.some((entry) => entry.id === parsed.activeId) ? parsed.activeId ?? valid[0].id : valid[0].id, tournaments: valid };
+    const first = valid[0] as SavedTournament;
+    return { activeId: valid.some((entry) => entry.id === parsed.activeId) ? parsed.activeId ?? first.id : first.id, tournaments: valid };
   } catch {
     return null;
   }
@@ -103,7 +104,7 @@ function teamInitials(name: string) {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function TeamCrest({ team, small = false }: { team?: Team; small?: boolean }) {
+function TeamCrest({ team, small = false }: { team?: Team | undefined; small?: boolean }) {
   return (
     <span className={cn("team-crest", small && "team-crest-small", !team && "team-crest-empty")} aria-hidden="true">
       {team ? teamInitials(team.name) : <Shield size={small ? 12 : 15} strokeWidth={1.7} />}
@@ -366,7 +367,7 @@ function GroupsScreen({ state, update, onLock }: { state: TournamentState; updat
   );
 }
 
-function TeamSlot({ team, score, winner, onClick }: { team?: Team; score: number | null; winner: boolean; onClick?: () => void }) {
+function TeamSlot({ team, score, winner, onClick }: { team?: Team | undefined; score: number | null; winner: boolean; onClick?: () => void }) {
   return <div className={cn("bracket-team-slot", winner && "bracket-team-winner")} onClick={onClick}><TeamCrest team={team} small /><span className="bracket-team-name">{team?.name ?? "To be decided"}</span><strong className="bracket-score">{score ?? "–"}</strong>{winner && <span className="winner-marker" aria-label="Winner"><Crown size={12} /></span>}</div>;
 }
 
@@ -409,7 +410,7 @@ function MatchEditPanel({ game, state, onSave }: { game: TournamentMatch; state:
   );
 }
 
-function BracketColumn({ title, children, side }: { title: string; children: React.ReactNode; side?: "left" | "right" }) {
+function BracketColumn({ title, children, side }: { title: string; children: React.ReactNode; side?: "left" | "right" | "center" }) {
   return <div className={cn("bracket-column", side && `bracket-column-${side}`)}><p className="bracket-column-title">{title}</p><div className="bracket-column-matches">{children}</div></div>;
 }
 
@@ -421,6 +422,8 @@ function KnockoutScreen({ state, update, onReset }: { state: TournamentState; up
   const qfs = games.filter((game) => game.id.startsWith("ko-qf-"));
   const semis = games.filter((game) => game.id.startsWith("ko-sf-") || (qfs.length === 2 && game.round === "Semi-finals" && game.id.startsWith("ko-qf-") === false));
   const semiMatches = qfs.length === 2 ? qfs : semis;
+  const semiLeft = semiMatches[0];
+  const semiRight = semiMatches[1];
   const final = games.find((game) => game.id === "ko-final");
   const third = games.find((game) => game.id === "ko-third");
   const championId = final ? matchWinner(final) : null;
@@ -440,14 +443,14 @@ function KnockoutScreen({ state, update, onReset }: { state: TournamentState; up
         <div className="bracket-tree" style={{ "--bracket-scale": zoom } as React.CSSProperties}>
           <BracketColumn title="Quarter-finals" side="left">{qfs.slice(0, 2).map((game) => <KnockoutMatchCard key={game.id} game={game} state={state} selected={game.id === selected?.id} onSelect={() => setSelectedId(game.id)} />)}</BracketColumn>
           <span className="bracket-connector connector-left-one" aria-hidden="true" />
-          <BracketColumn title="Semi-finals" side="left">{semiMatches[0] && <KnockoutMatchCard game={semiMatches[0]} state={state} selected={semiMatches[0].id === selected?.id} onSelect={() => setSelectedId(semiMatches[0].id)} />}</BracketColumn>
+          <BracketColumn title="Semi-finals" side="left">{semiLeft && <KnockoutMatchCard game={semiLeft} state={state} selected={semiLeft.id === selected?.id} onSelect={() => setSelectedId(semiLeft.id)} />}</BracketColumn>
           <span className="bracket-connector connector-left-two" aria-hidden="true" />
           <BracketColumn title="Grand Final" side="center">
             {final && <button type="button" className={cn("grand-final-card", selected?.id === final.id && "grand-final-selected")} onClick={() => setSelectedId(final.id)}><div className="grand-final-art"><Trophy /></div><div className="grand-final-title"><p>Grand Final</p><span>{final.status === "full-time" ? "FULL TIME" : "FINAL"}</span></div><TeamSlot team={teamById(state, final.homeTeamId)} score={final.homeScore} winner={matchWinner(final) === final.homeTeamId} /><TeamSlot team={teamById(state, final.awayTeamId)} score={final.awayScore} winner={matchWinner(final) === final.awayTeamId} />{champion && <div className="winner-banner"><Crown /> Champion <strong>{champion.name}</strong></div>}</button>}
             {third && <div className="third-place-card"><div className="third-place-heading"><span>03</span><strong>3rd Place</strong>{third.status === "full-time" && <Badge variant="secondary">Full Time</Badge>}</div><TeamSlot team={teamById(state, third.homeTeamId)} score={third.homeScore} winner={matchWinner(third) === third.homeTeamId} /><TeamSlot team={teamById(state, third.awayTeamId)} score={third.awayScore} winner={matchWinner(third) === third.awayTeamId} /><Button type="button" size="sm" variant="ghost" onClick={() => setSelectedId(third.id)}>{selected?.id === third.id ? "Selected match" : "Enter result"}</Button></div>}
           </BracketColumn>
           <span className="bracket-connector connector-right-two" aria-hidden="true" />
-          <BracketColumn title="Semi-finals" side="right">{semiMatches[1] && <KnockoutMatchCard game={semiMatches[1]} state={state} selected={semiMatches[1].id === selected?.id} onSelect={() => setSelectedId(semiMatches[1].id)} />}</BracketColumn>
+          <BracketColumn title="Semi-finals" side="right">{semiRight && <KnockoutMatchCard game={semiRight} state={state} selected={semiRight.id === selected?.id} onSelect={() => setSelectedId(semiRight.id)} />}</BracketColumn>
           <span className="bracket-connector connector-right-one" aria-hidden="true" />
           <BracketColumn title="Quarter-finals" side="right">{qfs.slice(2, 4).map((game) => <KnockoutMatchCard key={game.id} game={game} state={state} selected={game.id === selected?.id} onSelect={() => setSelectedId(game.id)} />)}</BracketColumn>
         </div>

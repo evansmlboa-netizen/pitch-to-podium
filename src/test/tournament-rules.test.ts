@@ -137,6 +137,7 @@ describe("group stage scoring", () => {
   it("keeps a group score free of penalty columns", () => {
     const state = stateWithGroups({ A: ["Alpha", "Beta", "Gamma", "Delta"] });
     const fixture = state.groupMatches[0];
+    if (!fixture) throw new Error("expected a group fixture");
     const scored = saveGroupScore(state, fixture.id, 3, 1);
     const saved = scored.groupMatches.find((game) => game.id === fixture.id);
     expect(saved?.status).toBe("full-time");
@@ -189,7 +190,8 @@ describe("draw generation", () => {
     const labels = Object.keys(groups);
     expect(labels).toEqual(["A", "B", "C", "D"]);
     labels.forEach((label) => {
-      const pots = groups[label].map((teamId) => teams.find((team) => team.id === teamId)?.pot);
+      const members = groups[label] ?? [];
+      const pots = members.map((teamId) => teams.find((team) => team.id === teamId)?.pot);
       expect([...pots].sort()).toEqual([1, 2, 3, 4]);
     });
   });
@@ -209,10 +211,10 @@ describe("draw generation", () => {
       manualGroup: index < 4 ? "A" : "B",
     }));
     const groups = buildGroups(teams, "manual");
-    expect(groups.A).toHaveLength(4);
-    expect(groups.B).toHaveLength(4);
-    expect(groups.A).toContain(teams[0].id);
-    expect(groups.B).toContain(teams[7].id);
+    expect(groups["A"] ?? []).toHaveLength(4);
+    expect(groups["B"] ?? []).toHaveLength(4);
+    expect(groups["A"] ?? []).toContain(teams[0]?.id);
+    expect(groups["B"] ?? []).toContain(teams[7]?.id);
   });
 });
 
@@ -235,7 +237,7 @@ describe("knockout seeding and advancement", () => {
     const seeded = bracket.filter((game) => game.round === "Quarter-finals").flatMap((game) => [game.homeTeamId, game.awayTeamId]);
     expect(seeded.filter(Boolean)).toHaveLength(8);
     expect(new Set(seeded).size).toBe(8);
-    expect(bracket.filter((game) => game.id === "ko-final")[0].homeTeamId).toBeNull();
+    expect(bracket.find((game) => game.id === "ko-final")?.homeTeamId).toBeNull();
   });
 
   it("seeds four clubs straight into semi-finals", () => {
